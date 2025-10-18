@@ -17,36 +17,33 @@ class MCPAgentRuntime:
         self.llm = None
 
     async def initialize(self):
-        """Initialize the MCP agent (uses YAML config automatically if present)."""
+        """Initialize the MCP agent using YAML config (Node-based Playwright MCP)."""
         if self.initialized:
             return
 
-        # ✅ Start context (loads mcp_agent.config.yaml automatically)
+        # ✅ Start context — automatically loads mcp_agent.config.yaml
         self.mcp_context = self.mcp_app.run()
         self.mcp_agent_app = await self.mcp_context.__aenter__()
 
-        # ✅ Create the browser agent configured to talk to the Playwright MCP
+        # ✅ Create the autonomous browser agent
         self.browser_agent = Agent(
             name="browser",
             instruction=dedent("""
-                You are a direct, autonomous web-browsing agent.
-                - Follow the user’s commands directly without asking for confirmation.
-                - Use the Playwright MCP server to open pages, scroll, click, and extract content.
-                - Provide concise, human-readable markdown summaries of what you find.
+                You are a powerful autonomous web-browsing agent.
+                - Follow the user's instructions directly without confirmation.
+                - Use the Playwright MCP server to browse, scroll, click, and extract information.
+                - Summarize pages in clean Markdown with short, natural responses.
             """),
             server_names=["playwright"],
         )
 
         await self.browser_agent.initialize()
-
-        # ✅ Attach OpenAI model (same as prototype)
         self.llm = await self.browser_agent.attach_llm(OpenAIAugmentedLLM)
-
         self.initialized = True
         print("✅ MCP Agent initialized with Node-based Playwright MCP server.")
 
     async def run(self, message: str) -> str:
-        """Execute the browsing agent exactly like in the prototype."""
+        """Execute browsing or reasoning."""
         if not self.initialized:
             await self.initialize()
 
@@ -63,5 +60,5 @@ class MCPAgentRuntime:
             return f"Error running MCP Agent: {str(e)}"
 
 
-# Create one shared runtime instance
+# ✅ Single runtime instance (used by FastAPI)
 runtime = MCPAgentRuntime()

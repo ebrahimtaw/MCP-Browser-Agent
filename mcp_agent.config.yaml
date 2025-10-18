@@ -5,7 +5,7 @@ logger:
   progress_display: true
   path_settings:
     path_pattern: "logs/mcp-agent-{unique_id}.jsonl"
-    unique_id: "timestamp" # Options: "timestamp" or "session_id"
+    unique_id: "timestamp"
     timestamp_format: "%Y%m%d_%H%M%S"
 
 mcp:
@@ -14,7 +14,5 @@ mcp:
       command: "npx"
       args: ["@playwright/mcp@latest"]
 
-
 openai:
-  # Secrets (API keys, etc.) are stored in an mcp_agent.secrets.yaml file which can be gitignored
   default_model: "gpt-4o-mini"
