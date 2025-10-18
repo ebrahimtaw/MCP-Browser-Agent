@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+/* Base styles */
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #0a0a0a;
+  color: white;
+}
+
+/* Pulsing circle animation */
+@keyframes pulseCircles {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(2);
+    opacity: 1;
+  }
+}
+
+.circles {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.circle {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.08), transparent 70%);
+  animation: pulseCircles 7s infinite ease-in-out;
+}
+
+.circle:nth-child(1) { width: 400px; height: 400px; animation-delay: 0s; }
+.circle:nth-child(2) { width: 600px; height: 600px; animation-delay: 1s; }
+.circle:nth-child(3) { width: 800px; height: 800px; animation-delay: 2s; }
+.circle:nth-child(4) { width: 1000px; height: 1000px; animation-delay: 3s; }
+
+/* Soft glowing shadows */
+button {
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.1);
+}
+
+button:hover {
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.2);
+}
+
+/* Subtle fade transitions for everything */
+* {
+  transition: all 0.3s ease-in-out;
+}
