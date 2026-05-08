@@ -1,6 +1,10 @@
 import os
 import asyncio
 from textwrap import dedent
+
+os.environ.setdefault("PLAYWRIGHT_LAUNCH_ARGS", "--disable-dev-shm-usage,--no-sandbox,--disable-gpu")
+os.environ.setdefault("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH", "/usr/bin/chromium-browser")
+
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
@@ -25,7 +29,7 @@ class MCPAgentRuntime:
         self.mcp_context = self.mcp_app.run()
         self.mcp_agent_app = await self.mcp_context.__aenter__()
 
-        # Create the autonomous browser agent
+        # creating the autonomous browser agent
         self.browser_agent = Agent(
             name="browser",
             instruction=dedent("""

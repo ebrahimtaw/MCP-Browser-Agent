@@ -3,7 +3,7 @@ services:
     name: browser-mcp-agent
     runtime: python
     pythonVersion: 3.11
-    buildCommand: apt-get update && apt-get install -y chromium-browser && pip install -r requirements.txt
+    buildCommand: apt-get update && apt-get install -y chromium-browser chromium-codecs-ffmpeg libxss1 libnss3 libxrandr2 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxkbcommon0 libpango-1.0-0 libpangocairo-1.0-0 libdbus-1-3 && pip install -r requirements.txt
     startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: OPENAI_API_KEY
@@ -11,3 +11,7 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         scope: run
+      - key: PLAYWRIGHT_LAUNCH_ARGS
+        value: --disable-dev-shm-usage,--no-sandbox,--disable-gpu
+      - key: PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+        value: /usr/bin/chromium-browser
