@@ -2,6 +2,10 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 
+interface AgentResponse {
+  response: string;
+}
+
 export default function Home() {
   const [command, setCommand] = useState("");
   const [response, setResponse] = useState("");
@@ -11,15 +15,17 @@ export default function Home() {
     setLoading(true);
     setResponse("");
     try {
-      const res = await fetch(process.env.NEXT_PUBLIC_API_URL + "/run_agent", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const res = await fetch(`${apiUrl}/run_agent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: command }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as AgentResponse;
       setResponse(data.response);
-    } catch (err: any) {
-      setResponse("Error: " + err.message);
+    } catch (err) {
+      const error = err instanceof Error ? err.message : "Unknown error";
+      setResponse(`Error: ${error}`);
     } finally {
       setLoading(false);
     }
