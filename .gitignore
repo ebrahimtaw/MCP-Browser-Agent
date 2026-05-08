@@ -44,6 +44,9 @@ frontend/build/
 *~
 .DS_Store
 
+# Claude Code local
+.claude/
+
 # Logs
 logs/
 *.log

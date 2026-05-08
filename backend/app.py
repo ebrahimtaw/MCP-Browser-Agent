@@ -1,5 +1,4 @@
 import os
-import sys
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -10,17 +9,18 @@ try:
     from .agent_runtime import runtime
 except ImportError as e:
     print(f"Warning: Could not import agent_runtime: {e}")
-    print("Agent will initialize on first request")
     runtime = None
 
 app = FastAPI(title="MCP Browser Agent API")
 
-# CORS configuration for production
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001")
+allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+allow_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX")  # e.g. https://.*\\.vercel\\.app
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

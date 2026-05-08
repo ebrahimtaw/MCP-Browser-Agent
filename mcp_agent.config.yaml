@@ -1,22 +1,21 @@
 execution_engine: asyncio
 logger:
-  transports: [console, file]
-  level: debug
-  progress_display: true
-  path_settings:
-    path_pattern: "logs/mcp-agent-{unique_id}.jsonl"
-    unique_id: "timestamp"
-    timestamp_format: "%Y%m%d_%H%M%S"
+  transports: [console]
+  level: info
+  progress_display: false
 
 mcp:
   servers:
     playwright:
       command: "npx"
-      args: ["@playwright/mcp@latest"]
-      env:
-        PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST: "https://github.com/microsoft/playwright/releases/download"
-        PLAYWRIGHT_LAUNCH_ARGS: "--no-sandbox --disable-gpu --disable-dev-shm-usage"
-        DISPLAY: ":99"
+      args:
+        - "-y"
+        - "@playwright/mcp@latest"
+        - "--headless"
+        - "--no-sandbox"
+        - "--browser"
+        - "chromium"
+        - "--isolated"
 
 openai:
   default_model: "gpt-4o-mini"
