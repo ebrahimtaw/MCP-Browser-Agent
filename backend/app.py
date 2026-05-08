@@ -1,10 +1,17 @@
 import os
+import sys
 from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
-from .agent_runtime import runtime
+
+try:
+    from .agent_runtime import runtime
+except ImportError as e:
+    print(f"Warning: Could not import agent_runtime: {e}")
+    print("Agent will initialize on first request")
+    runtime = None
 
 app = FastAPI(title="MCP Browser Agent API")
 
@@ -19,14 +26,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-async def startup_event():
-    await runtime.initialize()
-    print("MCP Agent initialized with Playwright support.")
-
 @app.post("/run_agent")
 async def run_agent(data: dict = Body(...)):
     """Receives a command and returns agent response."""
+    if runtime is None:
+        return {"response": "Error: Agent runtime not available. Check deployment logs."}
     message = data.get("message", "")
     result = await runtime.run(message)
     return {"response": result}
