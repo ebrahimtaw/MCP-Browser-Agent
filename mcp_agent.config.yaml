@@ -13,6 +13,8 @@ mcp:
     playwright:
       command: "npx"
       args: ["@playwright/mcp@latest"]
+      env:
+        PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST: "https://github.com/microsoft/playwright/releases/download"
 
 openai:
   default_model: "gpt-4o-mini"
