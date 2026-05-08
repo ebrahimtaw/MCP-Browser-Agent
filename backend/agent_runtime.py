@@ -2,9 +2,6 @@ import os
 import asyncio
 from textwrap import dedent
 
-os.environ.setdefault("PLAYWRIGHT_LAUNCH_ARGS", "--disable-dev-shm-usage,--no-sandbox,--disable-gpu")
-os.environ.setdefault("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH", "/usr/bin/chromium-browser")
-
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
