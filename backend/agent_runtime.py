@@ -21,11 +21,11 @@ class MCPAgentRuntime:
         if self.initialized:
             return
 
-        # ✅ Start context — automatically loads mcp_agent.config.yaml
+        # Start context — automatically loads mcp_agent.config.yaml
         self.mcp_context = self.mcp_app.run()
         self.mcp_agent_app = await self.mcp_context.__aenter__()
 
-        # ✅ Create the autonomous browser agent
+        # Create the autonomous browser agent
         self.browser_agent = Agent(
             name="browser",
             instruction=dedent("""
@@ -40,7 +40,7 @@ class MCPAgentRuntime:
         await self.browser_agent.initialize()
         self.llm = await self.browser_agent.attach_llm(OpenAIAugmentedLLM)
         self.initialized = True
-        print("✅ MCP Agent initialized with Node-based Playwright MCP server.")
+        print("MCP Agent initialized with Node-based Playwright MCP server.")
 
     async def run(self, message: str) -> str:
         """Execute browsing or reasoning."""
@@ -60,5 +60,5 @@ class MCPAgentRuntime:
             return f"Error running MCP Agent: {str(e)}"
 
 
-# ✅ Single runtime instance (used by FastAPI)
+# Single runtime instance (used by FastAPI)
 runtime = MCPAgentRuntime()
