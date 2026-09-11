@@ -1,21 +1,5 @@
 # Browser MCP Agent
 
-An intelligent MCP agent that navigates, extracts, and summarizes web content.
+I've built this intelligent MCP agent that enables you to navigate, extract, and summarize anything in your browser. The agent can scroll, etc...
 
-## Setup
-
-### Backend
-```bash
-export OPENAI_API_KEY="your-api-key"
-pip install -r requirements.txt
-uvicorn backend.app:app --reload --port 8000
-```
-
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Visit http://localhost:3000
+deployment had an issue, will solve it later, but feel free to see the code logic
