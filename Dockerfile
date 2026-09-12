@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive \
     VIRTUAL_ENV=/opt/venv \
     PATH=/opt/venv/bin:$PATH \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-pip python3-venv ca-certificates curl \
@@ -18,21 +18,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && pip install --upgrade pip
 
 # Pinned: @playwright/mcp ships an alpha playwright-core, so "latest" can change
-# the required browser revision without warning. Installing browsers with the
-# CLI from this very package guarantees build and runtime agree on the revision.
+# the required browser revision without warning.
 #
-# PLAYWRIGHT_BROWSERS_PATH only controls where the *build* puts them. The MCP
-# server is spawned with a scrubbed environment, so backend/agent_runtime.py
-# forwards this variable explicitly -- without that the server looks in
-# $HOME/.cache/ms-playwright and reports the browser as not installed.
+# Browsers go to the DEFAULT cache location ($HOME/.cache/ms-playwright) on
+# purpose. The MCP server is spawned with a scrubbed environment that keeps only
+# HOME/LOGNAME/PATH/SHELL/TERM/USER, so a PLAYWRIGHT_BROWSERS_PATH pointing
+# anywhere else gets dropped and the server looks here regardless.
 #
-# The final `test` fails the build rather than letting that surface at runtime.
+# `install-browser chrome-for-testing` is the package's own command and installs
+# exactly the build the server resolves to -- `install chromium` put it in a
+# different layout and the server reported it as not installed.
+#
+# The final `test` fails the build instead of letting this surface at runtime.
 RUN npm install -g @playwright/mcp@0.0.80 \
-    && PW_CLI="$(node -e "const p=require('path'); \
-         const j=require.resolve('playwright-core/package.json',{paths:[process.argv[1]]}); \
-         console.log(p.join(p.dirname(j),'cli.js'));" "$(npm root -g)/@playwright/mcp")" \
-    && echo "playwright-core CLI: $PW_CLI" \
-    && node "$PW_CLI" install --with-deps chromium chromium-headless-shell \
+    && playwright-mcp install-browser --with-deps chrome-for-testing \
     && playwright-mcp --version \
     && ls -1 "$PLAYWRIGHT_BROWSERS_PATH" \
     && test -n "$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -name chrome -type f -print -quit)" \

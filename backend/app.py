@@ -6,9 +6,12 @@ reports the real agent state and is the one to read when debugging.
 """
 
 import asyncio
+import glob
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -68,6 +71,42 @@ async def root():
     return {"status": "ok", "message": "MCP Browser Agent running!"}
 
 
+def _browser_state() -> dict:
+    """Where Playwright will look for a browser, and whether one is there.
+
+    `agent_ready` only means the MCP server started; the browser is not launched
+    until the first navigation. This reports the filesystem facts so a missing
+    browser is visible here instead of arriving as an apology from the model.
+    """
+    # Matches Playwright's own resolution: the explicit override, else the
+    # HOME-derived default (HOME is one of the few vars that survives the
+    # scrubbed environment the MCP server is spawned with).
+    configured = os.getenv("PLAYWRIGHT_BROWSERS_PATH")
+    # Playwright's per-platform default cache. The container is Linux; the other
+    # branches keep this report honest during local development.
+    home = Path.home()
+    if sys.platform == "darwin":
+        default = str(home / "Library" / "Caches" / "ms-playwright")
+    elif sys.platform == "win32":
+        default = str(home / "AppData" / "Local" / "ms-playwright")
+    else:
+        default = str(home / ".cache" / "ms-playwright")
+    search_root = configured or default
+
+    executables = sorted(
+        glob.glob(os.path.join(search_root, "*", "*", "chrome"))
+        + glob.glob(os.path.join(search_root, "*", "*", "headless_shell"))
+    )
+    return {
+        "browsers_path_env": configured,
+        "browsers_path_default": default,
+        "browsers_path_searched": search_root,
+        "paths_agree": configured in (None, default),
+        "browser_executables": executables[:5],
+        "browser_installed": bool(executables),
+    }
+
+
 @app.get("/health")
 async def health():
     return {
@@ -75,6 +114,7 @@ async def health():
         "agent_ready": runtime.ready,
         "openai_key_configured": bool(os.getenv("OPENAI_API_KEY")),
         "init_error": runtime.init_error,
+        "browser": _browser_state(),
     }
 
 
