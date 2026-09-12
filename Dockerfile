@@ -19,8 +19,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Pinned: @playwright/mcp ships an alpha playwright-core, so "latest" can change
 # the required browser revision without warning. Installing browsers with the
-# `playwright` bin from this very package guarantees build/runtime agree, and
-# PLAYWRIGHT_BROWSERS_PATH keeps them where the server looks at runtime.
+# CLI from this very package guarantees build and runtime agree on the revision.
+#
+# PLAYWRIGHT_BROWSERS_PATH only controls where the *build* puts them. The MCP
+# server is spawned with a scrubbed environment, so backend/agent_runtime.py
+# forwards this variable explicitly -- without that the server looks in
+# $HOME/.cache/ms-playwright and reports the browser as not installed.
+#
+# The final `test` fails the build rather than letting that surface at runtime.
 RUN npm install -g @playwright/mcp@0.0.80 \
     && PW_CLI="$(node -e "const p=require('path'); \
          const j=require.resolve('playwright-core/package.json',{paths:[process.argv[1]]}); \
@@ -28,7 +34,9 @@ RUN npm install -g @playwright/mcp@0.0.80 \
     && echo "playwright-core CLI: $PW_CLI" \
     && node "$PW_CLI" install --with-deps chromium chromium-headless-shell \
     && playwright-mcp --version \
-    && ls -1 "$PLAYWRIGHT_BROWSERS_PATH"
+    && ls -1 "$PLAYWRIGHT_BROWSERS_PATH" \
+    && test -n "$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -name chrome -type f -print -quit)" \
+    && echo "chrome binary present in $PLAYWRIGHT_BROWSERS_PATH"
 
 WORKDIR /app
 

@@ -31,6 +31,12 @@ MAX_HISTORY_MESSAGES = int(os.getenv("AGENT_MAX_HISTORY_MESSAGES", "40"))
 # page degrades into a truncated read instead of a hard context-overflow error.
 MAX_TOOL_RESULT_CHARS = int(os.getenv("AGENT_MAX_TOOL_RESULT_CHARS", "80000"))
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+# The MCP SDK spawns stdio servers with a scrubbed environment -- only
+# HOME/LOGNAME/PATH/SHELL/TERM/USER survive (see mcp.client.stdio
+# .get_default_environment). Anything the browser needs must be forwarded
+# explicitly, or Playwright falls back to $HOME/.cache/ms-playwright and
+# reports the browser as "not installed".
+FORWARDED_SERVER_ENV = ("PLAYWRIGHT_BROWSERS_PATH",)
 
 INSTRUCTION = dedent(
     """
@@ -119,7 +125,8 @@ class MCPAgentRuntime:
         log.info("Initializing MCP agent and launching headless Chromium...")
         try:
             self._mcp_context = self._mcp_app.run()
-            await self._mcp_context.__aenter__()
+            agent_app = await self._mcp_context.__aenter__()
+            self._forward_server_env(agent_app)
 
             self._agent = Agent(
                 name="browser",
@@ -146,6 +153,24 @@ class MCPAgentRuntime:
             log.exception("MCP agent initialization failed.")
             await self._teardown()
             raise
+
+    @staticmethod
+    def _forward_server_env(agent_app) -> None:
+        """Pass browser-related env vars through to the spawned MCP server."""
+        try:
+            server = agent_app.context.config.mcp.servers["playwright"]
+        except (AttributeError, KeyError):
+            log.warning("Could not reach playwright server settings to forward env.")
+            return
+
+        forwarded = {
+            name: os.environ[name]
+            for name in FORWARDED_SERVER_ENV
+            if os.environ.get(name)
+        }
+        if forwarded:
+            server.env = {**(server.env or {}), **forwarded}
+            log.info("Forwarding to MCP server: %s", ", ".join(sorted(forwarded)))
 
     async def warmup(self) -> None:
         """Pay the browser-launch cost at boot instead of on the first prompt."""
