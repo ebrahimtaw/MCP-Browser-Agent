@@ -18,6 +18,11 @@ mcp:
         - "--browser"
         - "chromium"
         - "--isolated"          # in-memory profile, nothing leaks between runs
+        - "--config"
+        # Chromium needs --disable-dev-shm-usage in containers: the default
+        # 64 MB /dev/shm makes it crash on content-heavy pages. Relative path: the
+        # server inherits our cwd (repo root locally, /app in the container).
+        - "playwright-mcp.config.json"
         - "--timeout-navigation"
         - "45000"
         - "--timeout-action"

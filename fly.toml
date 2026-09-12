@@ -1,0 +1,45 @@
+# Fly.io config for the Python + Playwright backend.
+# Deploy with:  fly deploy --ha=false
+app = "browser-mcp-agent"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  # Exact origins allowed to call the API. Must include the Vercel production
+  # URL or the browser blocks every request with a CORS error.
+  ALLOWED_ORIGINS = "https://mcp-browser-agent-sigma.vercel.app,https://mcp-browser-agent-ebrahims-projects-510f379a.vercel.app"
+  # Vercel gives each preview deploy its own hostname.
+  ALLOWED_ORIGIN_REGEX = 'https://.*\.vercel\.app'
+  AGENT_RUN_TIMEOUT = "240"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Scale to zero while idle so an unused agent costs almost nothing. The first
+  # request after a stop waits ~10-20s for the machine to boot and Chromium to
+  # start; the UI shows an elapsed timer, so this is visible rather than silent.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 4
+    hard_limit = 10
+
+# `/` is a cheap always-200 probe. `/health` reports real agent state but would
+# fail the check during a cold start, so it is not what Fly polls.
+[[http_service.checks]]
+  path = "/"
+  method = "GET"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "30s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # 256 MB (the shared-cpu-1x default) is not enough for Chromium plus Python.
+  memory = "1gb"

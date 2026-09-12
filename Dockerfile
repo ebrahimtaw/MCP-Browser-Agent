@@ -36,7 +36,7 @@ COPY requirements.txt ./
 RUN pip install -r requirements.txt
 
 COPY backend/ ./backend/
-COPY mcp_agent.config.yaml ./
+COPY mcp_agent.config.yaml playwright-mcp.config.json ./
 
 ENV PORT=8000
 EXPOSE 8000

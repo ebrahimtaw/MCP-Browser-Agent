@@ -26,26 +26,66 @@ RUN_TIMEOUT_SECONDS = float(os.getenv("AGENT_RUN_TIMEOUT", "240"))
 # Turns are (user, assistant, plus tool traffic); keep the tail so long
 # sessions cannot grow the prompt without bound.
 MAX_HISTORY_MESSAGES = int(os.getenv("AGENT_MAX_HISTORY_MESSAGES", "40"))
+# A full accessibility snapshot of a large page runs to ~1.1M characters
+# (~280k tokens) -- past any context window. Cap each tool result so one big
+# page degrades into a truncated read instead of a hard context-overflow error.
+MAX_TOOL_RESULT_CHARS = int(os.getenv("AGENT_MAX_TOOL_RESULT_CHARS", "80000"))
+MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 INSTRUCTION = dedent(
     """
     You are an autonomous web-browsing agent driving a real headless Chromium
-    browser through the Playwright MCP server. You always have working browser
-    tools; never claim you cannot access the web.
+    browser. You always have working browser tools; never claim you cannot
+    access the web.
 
-    Work in this order:
-      1. browser_navigate to the target URL. If the user named a site rather
-         than a URL, navigate to a sensible URL for it.
-      2. browser_snapshot to read the rendered accessibility tree.
-      3. Click, type, or navigate further as needed, taking a fresh snapshot
-         after each action that changes the page.
+    Your tools are named with a `playwright_` prefix, e.g.
+    `playwright_browser_navigate`.
 
+    How to read a page efficiently:
+      1. `playwright_browser_navigate` to the target URL.
+      2. To READ or SUMMARIZE content, call `playwright_browser_evaluate` with
+         the function `() => document.body.innerText`. This returns clean text
+         and is many times smaller than a full snapshot.
+      3. To FIND something specific on a long page, use
+         `playwright_browser_find` rather than dumping the whole page.
+      4. Only call `playwright_browser_snapshot` when you need element refs in
+         order to click, type, or fill a form -- its output is very large.
+
+    After any action that changes the page, re-read it before relying on it.
     If a tool call fails, retry with a different approach rather than giving up.
-    Base every factual claim on what you actually saw in a snapshot, and say so
-    plainly when a page did not contain the answer. Report findings in concise
-    Markdown.
+    If a tool result says it was truncated, do not re-request the same thing --
+    narrow it with `playwright_browser_find` instead.
+
+    Base every factual claim on what you actually saw, and say so plainly when
+    a page did not contain the answer. Report findings in concise Markdown.
     """
 ).strip()
+
+
+class BoundedOpenAIAugmentedLLM(OpenAIAugmentedLLM):
+    """OpenAI LLM that truncates oversized tool results before they reach the model."""
+
+    async def post_tool_call(self, tool_call_id, request, result):
+        result = await super().post_tool_call(
+            tool_call_id=tool_call_id, request=request, result=result
+        )
+        for part in getattr(result, "content", None) or []:
+            text = getattr(part, "text", None)
+            if text is not None and len(text) > MAX_TOOL_RESULT_CHARS:
+                dropped = len(text) - MAX_TOOL_RESULT_CHARS
+                part.text = (
+                    text[:MAX_TOOL_RESULT_CHARS]
+                    + f"\n\n[Truncated: {dropped} more characters were dropped. "
+                    "Do not re-request this; use playwright_browser_find to "
+                    "search the page for the specific text you need.]"
+                )
+                log.warning(
+                    "Truncated %s result: %d -> %d chars.",
+                    request.params.name,
+                    len(text),
+                    MAX_TOOL_RESULT_CHARS,
+                )
+        return result
 
 
 class AgentUnavailableError(RuntimeError):
@@ -87,7 +127,7 @@ class MCPAgentRuntime:
                 server_names=["playwright"],
             )
             await self._agent.initialize()
-            self._llm = await self._agent.attach_llm(OpenAIAugmentedLLM)
+            self._llm = await self._agent.attach_llm(BoundedOpenAIAugmentedLLM)
 
             # Fail loudly here rather than on the first user prompt: if the
             # Playwright MCP server did not start, it has no tools to offer.
@@ -138,6 +178,7 @@ class MCPAgentRuntime:
                             use_history=True,
                             maxTokens=MAX_TOKENS,
                             max_iterations=MAX_ITERATIONS,
+                            model=MODEL,
                         ),
                     ),
                     timeout=RUN_TIMEOUT_SECONDS,
