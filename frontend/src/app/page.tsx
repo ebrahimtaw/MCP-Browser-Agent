@@ -13,8 +13,16 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 // carries a useful message) wins the race against the client aborting.
 const CLIENT_TIMEOUT_MS = 280_000;
 
+interface Screenshot {
+  url: string;
+  title: string;
+  /** data:image/jpeg;base64,... of what the headless browser saw. */
+  image: string;
+}
+
 interface AgentResponse {
   response?: string;
+  screenshots?: Screenshot[];
   detail?: string;
 }
 
@@ -43,6 +51,7 @@ function getSessionId(): string {
 export default function Home() {
   const [command, setCommand] = useState("");
   const [response, setResponse] = useState("");
+  const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -65,6 +74,7 @@ export default function Home() {
 
     setLoading(true);
     setResponse("");
+    setScreenshots([]);
     setError("");
     setElapsed(0);
 
@@ -104,6 +114,7 @@ export default function Home() {
         return;
       }
       setResponse(data.response ?? "");
+      setScreenshots(data.screenshots ?? []);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setError(
@@ -206,6 +217,45 @@ export default function Home() {
         >
           <strong className="text-red-100">Something went wrong</strong>
           <p className="mt-2 text-sm whitespace-pre-wrap">{error}</p>
+        </motion.div>
+      )}
+
+      {screenshots.length > 0 && (
+        <motion.div
+          className="z-10 mt-8 w-full max-w-xl text-left"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.6 }}
+        >
+          <h2 className="font-plusjakarta mb-3 text-sm font-semibold tracking-wide text-gray-400 uppercase">
+            What the agent saw
+          </h2>
+          <div className="flex flex-col gap-4">
+            {screenshots.map((shot, i) => (
+              <figure
+                key={`${shot.url}-${i}`}
+                className="overflow-hidden rounded-xl border border-gray-700 bg-black/30 backdrop-blur-md"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- data URI, nothing for the Image optimizer to fetch */}
+                <img
+                  src={shot.image}
+                  alt={shot.title || `Step ${i + 1}`}
+                  className="w-full border-b border-gray-800"
+                  loading="lazy"
+                />
+                <figcaption className="font-plusjakarta p-3 text-xs">
+                  <span className="text-gray-300">
+                    {i + 1}. {shot.title || "Untitled page"}
+                  </span>
+                  {shot.url && (
+                    <span className="mt-1 block break-all text-gray-500">
+                      {shot.url}
+                    </span>
+                  )}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
         </motion.div>
       )}
 

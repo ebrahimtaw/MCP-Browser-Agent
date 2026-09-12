@@ -109,6 +109,32 @@ fly ssh console             # shell into the machine
 fly scale memory 2048       # if Chromium gets OOM-killed on big pages
 ```
 
+## Screenshots
+
+The browser is headless and runs on the server, so the user never sees it. To
+close that gap, a screenshot is captured automatically after every action that
+changes the page (navigate, click, type, select, key press, form fill) and
+returned with the answer:
+
+```json
+{
+  "response": "...markdown...",
+  "screenshots": [
+    { "url": "https://example.com/", "title": "Example Domain",
+      "image": "data:image/jpeg;base64,..." }
+  ]
+}
+```
+
+The frontend renders these under "What the agent saw". Capture is best effort —
+a failed screenshot never fails the request — and bounded by
+`AGENT_MAX_SCREENSHOTS` (default 6) since each one travels as base64 in the
+response. Images are stripped from what goes back to the model: they are for
+the user, and returning them would bill every screenshot as a vision input.
+
+A website cannot open or drive a visitor's own browser — that is a hard browser
+security boundary. These screenshots are how the user watches the agent work.
+
 ## Context budget
 
 A full accessibility snapshot of a large page (e.g. the Wikipedia article on

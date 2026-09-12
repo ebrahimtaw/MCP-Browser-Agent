@@ -23,6 +23,13 @@ mcp:
         # 64 MB /dev/shm makes it crash on content-heavy pages. Relative path: the
         # server inherits our cwd (repo root locally, /app in the container).
         - "playwright-mcp.config.json"
+        # Every screenshot also lands on disk. Keep them out of the working
+        # directory and let the server evict old ones instead of filling the
+        # container's filesystem over a long uptime.
+        - "--output-dir"
+        - "/tmp/playwright-mcp-output"
+        - "--output-max-size"
+        - "52428800"
         - "--timeout-navigation"
         - "45000"
         - "--timeout-action"

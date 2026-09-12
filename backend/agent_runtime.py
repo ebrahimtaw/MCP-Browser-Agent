@@ -9,6 +9,7 @@ caller's answer and grows until it overflows the context window.
 import asyncio
 import logging
 import os
+import re
 from textwrap import dedent
 
 from mcp_agent.app import MCPApp
@@ -38,6 +39,34 @@ MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 # reports the browser as "not installed".
 FORWARDED_SERVER_ENV = ("PLAYWRIGHT_BROWSERS_PATH",)
 
+# Screenshots are captured automatically after any action that changes the page,
+# so the user can watch what the agent saw. Bounded because each one is base64
+# in the JSON response.
+MAX_SCREENSHOTS = int(os.getenv("AGENT_MAX_SCREENSHOTS", "6"))
+SCREENSHOT_TIMEOUT = float(os.getenv("AGENT_SCREENSHOT_TIMEOUT", "30"))
+PAGE_CHANGING_TOOLS = frozenset({
+    "browser_navigate",
+    "browser_navigate_back",
+    "browser_click",
+    "browser_type",
+    "browser_select_option",
+    "browser_press_key",
+    "browser_fill_form",
+})
+
+_PAGE_URL_RE = re.compile(r"^- Page URL:\s*(.+)$", re.M)
+_PAGE_TITLE_RE = re.compile(r"^- Page Title:\s*(.+)$", re.M)
+
+
+def _page_meta(result) -> tuple[str, str]:
+    """Pull the URL and title the server reports alongside a tool result."""
+    text = "".join(
+        getattr(part, "text", "") or "" for part in getattr(result, "content", None) or []
+    )
+    url = _PAGE_URL_RE.search(text)
+    title = _PAGE_TITLE_RE.search(text)
+    return (url.group(1).strip() if url else "", title.group(1).strip() if title else "")
+
 INSTRUCTION = dedent(
     """
     You are an autonomous web-browsing agent driving a real headless Chromium
@@ -57,6 +86,10 @@ INSTRUCTION = dedent(
       4. Only call `playwright_browser_snapshot` when you need element refs in
          order to click, type, or fill a form -- its output is very large.
 
+    Do not call `playwright_browser_take_screenshot` yourself: a screenshot is
+    captured automatically after every action that changes the page, and shown
+    to the user alongside your answer.
+
     After any action that changes the page, re-read it before relying on it.
     If a tool call fails, retry with a different approach rather than giving up.
     If a tool result says it was truncated, do not re-request the same thing --
@@ -69,12 +102,71 @@ INSTRUCTION = dedent(
 
 
 class BoundedOpenAIAugmentedLLM(OpenAIAugmentedLLM):
-    """OpenAI LLM that truncates oversized tool results before they reach the model."""
+    """Caps tool output, and captures a screenshot after each page change.
+
+    The browser runs headless on the server, so the screenshots are the only way
+    a user can see what the agent actually looked at.
+    """
+
+    @property
+    def screenshots(self) -> list[dict]:
+        # Lazy rather than set in __init__, so this does not depend on the
+        # constructor signature attach_llm happens to use.
+        if not hasattr(self, "_screenshots"):
+            self._screenshots: list[dict] = []
+        return self._screenshots
+
+    def reset_screenshots(self) -> None:
+        self.screenshots.clear()
 
     async def post_tool_call(self, tool_call_id, request, result):
         result = await super().post_tool_call(
             tool_call_id=tool_call_id, request=request, result=result
         )
+        tool_name = request.params.name
+        # Tools reach the model namespaced by server, e.g. playwright_browser_*.
+        bare_name = tool_name.split("playwright_", 1)[-1]
+
+        if bare_name in PAGE_CHANGING_TOOLS and len(self.screenshots) < MAX_SCREENSHOTS:
+            await self._capture_screenshot(result)
+
+        self._truncate(tool_name, result)
+        self._strip_images(result)
+        return result
+
+    async def _capture_screenshot(self, trigger_result) -> None:
+        """Best effort: a failed screenshot must never fail the user's request."""
+        try:
+            shot = await asyncio.wait_for(
+                self.agent.call_tool("browser_take_screenshot", {"type": "jpeg"}),
+                timeout=SCREENSHOT_TIMEOUT,
+            )
+        except Exception:
+            log.warning("Screenshot capture failed.", exc_info=True)
+            return
+
+        data = next(
+            (
+                part.data
+                for part in getattr(shot, "content", None) or []
+                if getattr(part, "data", None)
+            ),
+            None,
+        )
+        if not data:
+            return
+
+        url, title = _page_meta(trigger_result)
+        self.screenshots.append(
+            {
+                "url": url,
+                "title": title,
+                "image": f"data:image/jpeg;base64,{data}",
+            }
+        )
+
+    @staticmethod
+    def _truncate(tool_name: str, result) -> None:
         for part in getattr(result, "content", None) or []:
             text = getattr(part, "text", None)
             if text is not None and len(text) > MAX_TOOL_RESULT_CHARS:
@@ -87,11 +179,24 @@ class BoundedOpenAIAugmentedLLM(OpenAIAugmentedLLM):
                 )
                 log.warning(
                     "Truncated %s result: %d -> %d chars.",
-                    request.params.name,
+                    tool_name,
                     len(text),
                     MAX_TOOL_RESULT_CHARS,
                 )
-        return result
+
+    @staticmethod
+    def _strip_images(result) -> None:
+        """Keep base64 images out of the prompt.
+
+        They are for the user, not the model: sending them back would bill every
+        screenshot as a vision input and crowd out the page text the model needs.
+        """
+        content = getattr(result, "content", None)
+        if not content:
+            return
+        kept = [part for part in content if getattr(part, "type", None) != "image"]
+        if len(kept) != len(content):
+            result.content = kept
 
 
 class AgentUnavailableError(RuntimeError):
@@ -181,7 +286,7 @@ class MCPAgentRuntime:
                 # Warmup is best effort; /run_agent retries and reports properly.
                 pass
 
-    async def run(self, message: str, session_id: str = "default") -> str:
+    async def run(self, message: str, session_id: str = "default") -> dict:
         if not message or not message.strip():
             raise ValueError("message must not be empty")
         if not os.getenv("OPENAI_API_KEY"):
@@ -195,6 +300,7 @@ class MCPAgentRuntime:
 
             # Swap in this session's history so callers stay isolated.
             self._llm.history.set(list(self._histories.get(session_id, [])))
+            self._llm.reset_screenshots()
             try:
                 result = await asyncio.wait_for(
                     self._llm.generate_str(
@@ -220,6 +326,7 @@ class MCPAgentRuntime:
                     -MAX_HISTORY_MESSAGES:
                 ]
             finally:
+                screenshots = list(self._llm.screenshots)
                 self._llm.history.clear()
 
         if not result or not result.strip():
@@ -227,7 +334,7 @@ class MCPAgentRuntime:
                 "The model returned an empty reply. This usually means the OpenAI "
                 "call failed (invalid key, rate limit, or no access to the model)."
             )
-        return result
+        return {"response": result, "screenshots": screenshots}
 
     async def _teardown(self) -> None:
         if self._mcp_context is not None:

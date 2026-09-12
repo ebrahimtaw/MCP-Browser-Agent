@@ -128,7 +128,7 @@ async def run_agent(data: dict = Body(...)):
         raise HTTPException(status_code=400, detail="`message` must not be empty.")
 
     try:
-        result = await runtime.run(message, session_id=session_id)
+        payload = await runtime.run(message, session_id=session_id)
     except TimeoutError as exc:
         raise HTTPException(status_code=504, detail=str(exc)) from exc
     except AgentUnavailableError as exc:
@@ -139,4 +139,5 @@ async def run_agent(data: dict = Body(...)):
             status_code=500, detail=f"{type(exc).__name__}: {exc}"
         ) from exc
 
-    return {"response": result}
+    # `screenshots` are data URIs of what the headless browser saw, in order.
+    return payload
