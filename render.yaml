@@ -3,9 +3,19 @@ services:
     name: browser-mcp-agent
     runtime: docker
     dockerfilePath: ./Dockerfile
+    # `/` is a cheap always-200 probe. `/health` reports real agent state but
+    # would fail the service during a cold start, so it is not the probe.
     healthCheckPath: /
+    # Chromium plus the Python runtime does not fit comfortably in 512 MB.
+    plan: starter
     envVars:
       - key: OPENAI_API_KEY
         sync: false
+      # Comma-separated exact origins allowed to call the API.
       - key: ALLOWED_ORIGINS
-        sync: false
+        value: https://mcp-browser-agent-sigma.vercel.app,https://mcp-browser-agent-ebrahims-projects-510f379a.vercel.app
+      # Vercel gives every preview deploy a fresh hostname, so allow the wildcard.
+      - key: ALLOWED_ORIGIN_REGEX
+        value: https://.*\.vercel\.app
+      - key: AGENT_RUN_TIMEOUT
+        value: "240"

@@ -61,3 +61,79 @@ button:hover {
 * {
   transition: all 0.3s ease-in-out;
 }
+/* Markdown rendered from the agent's answer. Tailwind's preflight strips list
+   markers and heading sizes, so restore just enough for a readable report. */
+.agent-markdown {
+  line-height: 1.65;
+}
+.agent-markdown > :first-child { margin-top: 0; }
+.agent-markdown > :last-child { margin-bottom: 0; }
+.agent-markdown p { margin: 0.75rem 0; }
+.agent-markdown h1,
+.agent-markdown h2,
+.agent-markdown h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-weight: 600;
+  color: #f3f4f6;
+  line-height: 1.3;
+}
+.agent-markdown h1 { font-size: 1.25rem; }
+.agent-markdown h2 { font-size: 1.125rem; }
+.agent-markdown h3 { font-size: 1rem; }
+.agent-markdown ul,
+.agent-markdown ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+.agent-markdown ul { list-style: disc; }
+.agent-markdown ol { list-style: decimal; }
+.agent-markdown li { margin: 0.25rem 0; }
+.agent-markdown a {
+  color: #93c5fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+.agent-markdown code {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.875em;
+}
+.agent-markdown pre {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid #374151;
+  border-radius: 0.5rem;
+  padding: 0.85rem;
+  margin: 0.75rem 0;
+  overflow-x: auto;
+}
+.agent-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.agent-markdown blockquote {
+  border-left: 3px solid #4b5563;
+  margin: 0.75rem 0;
+  padding-left: 0.85rem;
+  color: #9ca3af;
+}
+.agent-markdown table {
+  width: 100%;
+  margin: 0.75rem 0;
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.agent-markdown th,
+.agent-markdown td {
+  border: 1px solid #374151;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+.agent-markdown th { background: rgba(255, 255, 255, 0.05); }
+.agent-markdown hr {
+  border: 0;
+  border-top: 1px solid #374151;
+  margin: 1rem 0;
+}

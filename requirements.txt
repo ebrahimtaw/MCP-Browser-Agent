@@ -1,8 +1,14 @@
-fastapi
-uvicorn
-python-dotenv
-mcp-agent
-httpx
-pydantic
-pyyaml
-openai
+# Pinned deliberately. mcp-agent declares `mcp>=1.20.0`, and mcp 2.x renamed
+# FastMCP -> MCPServer, which breaks `import mcp_agent.app` at import time.
+# An unpinned install silently produced a backend whose agent was always None.
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+python-dotenv==1.2.3
+
+mcp-agent==0.2.6
+mcp>=1.30.0,<2
+openai>=1.58.1,<4
+
+httpx==0.28.1
+pydantic==2.13.5
+PyYAML==6.0.3

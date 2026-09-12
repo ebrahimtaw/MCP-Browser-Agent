@@ -1,21 +1,57 @@
+"""FastAPI surface for the browsing agent.
+
+Note on health checks: `/` stays cheap and always-200 so the platform does not
+recycle the container while a long browsing run holds the agent lock. `/health`
+reports the real agent state and is the one to read when debugging.
+"""
+
+import asyncio
+import logging
 import os
+from contextlib import asynccontextmanager
+
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from fastapi import FastAPI, Body
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-try:
-    from .agent_runtime import runtime
-except ImportError as e:
-    print(f"Warning: Could not import agent_runtime: {e}")
-    runtime = None
+from .agent_runtime import AgentUnavailableError, runtime
 
-app = FastAPI(title="MCP Browser Agent API")
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+log = logging.getLogger("backend.app")
+
+# Bounded so a wedged MCP server cannot stop the port from ever opening.
+WARMUP_TIMEOUT = float(os.getenv("AGENT_WARMUP_TIMEOUT", "60"))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Connect to the MCP server up front (it takes well under a second) so the
+    # first real prompt does not pay for it. Done in the lifespan's own task
+    # rather than a background one: mcp-agent ties its context to the task that
+    # enters it, and tearing down from a different task raises on exit.
+    try:
+        await asyncio.wait_for(runtime.warmup(), timeout=WARMUP_TIMEOUT)
+    except asyncio.TimeoutError:
+        log.error("Agent warmup timed out; will retry on first request.")
+    try:
+        yield
+    finally:
+        await runtime.shutdown()
+
+
+app = FastAPI(title="MCP Browser Agent API", lifespan=lifespan)
 
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001")
 allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
-allow_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX")  # e.g. https://.*\\.vercel\\.app
+# Without this the Vercel preview deployments (which get a new hostname per
+# commit) are blocked by CORS even though production is allow-listed.
+allow_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://.*\.vercel\.app")
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,15 +62,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/run_agent")
-async def run_agent(data: dict = Body(...)):
-    """Receives a command and returns agent response."""
-    if runtime is None:
-        return {"response": "Error: Agent runtime not available. Check deployment logs."}
-    message = data.get("message", "")
-    result = await runtime.run(message)
-    return {"response": result}
 
 @app.get("/")
 async def root():
     return {"status": "ok", "message": "MCP Browser Agent running!"}
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "agent_ready": runtime.ready,
+        "openai_key_configured": bool(os.getenv("OPENAI_API_KEY")),
+        "init_error": runtime.init_error,
+    }
+
+
+@app.post("/run_agent")
+async def run_agent(data: dict = Body(...)):
+    """Run one browsing turn and return the agent's Markdown answer."""
+    message = (data.get("message") or "").strip()
+    session_id = (data.get("session_id") or "default").strip() or "default"
+
+    if not message:
+        raise HTTPException(status_code=400, detail="`message` must not be empty.")
+
+    try:
+        result = await runtime.run(message, session_id=session_id)
+    except TimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except AgentUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("Agent run failed.")
+        raise HTTPException(
+            status_code=500, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    return {"response": result}

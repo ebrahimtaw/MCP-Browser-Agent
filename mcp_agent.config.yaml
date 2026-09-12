@@ -7,15 +7,21 @@ logger:
 mcp:
   servers:
     playwright:
-      command: "npx"
+      # Invoke the binary installed globally in the image. The previous
+      # `npx -y @playwright/mcp@latest` downloaded a fresh copy on every cold
+      # start, whose bundled playwright-core wanted a Chromium revision that
+      # was never installed at build time -> "Executable doesn't exist".
+      command: "playwright-mcp"
       args:
-        - "-y"
-        - "@playwright/mcp@latest"
         - "--headless"
-        - "--no-sandbox"
+        - "--no-sandbox"        # required: the container runs as root
         - "--browser"
         - "chromium"
-        - "--isolated"
+        - "--isolated"          # in-memory profile, nothing leaks between runs
+        - "--timeout-navigation"
+        - "45000"
+        - "--timeout-action"
+        - "15000"
 
 openai:
   default_model: "gpt-4o-mini"
